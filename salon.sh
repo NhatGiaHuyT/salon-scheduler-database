@@ -1,78 +1,55 @@
 #!/bin/bash
+
 PSQL="psql -X --username=freecodecamp --dbname=salon --tuples-only -c"
-
 echo -e "\n~~~~~ MY SALON ~~~~~\n"
+echo -e "Welcome to My Salon, how can I help you?\n"
 
-MAIN_MENU() {
+GET_SERVICES_ID() {
   if [[ $1 ]]
   then
     echo -e "\n$1"
-  else
-    echo -e "Welcome to My Salon, how can I help you?"
   fi
-
-
-  AVAILABLE_SERVICES=$($PSQL "SELECT * FROM services")
-  echo "$AVAILABLE_SERVICES" | while read SERVICE_ID BAR NAME
+  
+  LIST_SERVICES=$($PSQL "SELECT * FROM services")
+  echo "$LIST_SERVICES" | while read SERVICE_ID BAR SERVICE
   do
-    echo "$SERVICE_ID) $NAME"
+    ID=$(echo $SERVICE_ID | sed 's/ //g')
+    NAME=$(echo $SERVICE | sed 's/ //g')
+    echo "$ID) $SERVICE"
   done
-  echo "0) Exit"
   read SERVICE_ID_SELECTED
+  case $SERVICE_ID_SELECTED in
+    [1-5]) NEXT ;;
+        *) GET_SERVICES_ID "I could not find that service. What would you like today?" ;;
+  esac
+}
 
-  # check if input is valid
-  if [[ ! $SERVICE_ID_SELECTED =~ ^[0-9]+$ ]]
+NEXT() {
+  echo -e "\nWhat's your phone number?"
+  read CUSTOMER_PHONE
+  # CUSTOMER_PHONE_FORMATED=$(echo $CUSTOMER_PHONE | sed 's/[^0-9]*//g')
+  NAME=$($PSQL "SELECT name FROM customers WHERE phone='$CUSTOMER_PHONE'")
+  CUSTOMER_NAME=$(echo $NAME | sed 's/ //g')
+  if [[ -z $NAME ]]
   then
-    # if not valid return to main menu 
-    MAIN_MENU "Enter a valid input."
-  elif [[ $SERVICE_ID_SELECTED == 0 ]]
-  then 
-    echo -e "\nThank you for stopping by.\n"
-  else
-    # get service id
-    SERVICE_ID=$($PSQL "SELECT service_id FROM services WHERE service_id = $SERVICE_ID_SELECTED")
-    
-    
-    # if service doesn't exist
-    if [[ -z $SERVICE_ID ]]
-    then
-      # return to main menu
-      MAIN_MENU "I could not find that service. What would you like today?"
-    else 
-      SERVICE_NAME=$($PSQL "SELECT name FROM services WHERE service_id=$SERVICE_ID")
-      SERVICE_NAME_FORMATTED=$(echo $SERVICE_NAME | sed -r 's/^ *| *$//g')
-
-      # get customer info
-      echo -e "\nWhat's your phone number?"
-      read CUSTOMER_PHONE
-
-      CUSTOMER_NAME=$($PSQL "SELECT name FROM customers WHERE phone = '$CUSTOMER_PHONE'")
-
-      # if customer doesn't exist
-      if [[ -z $CUSTOMER_NAME ]]
-      then
-        # get new customer name
-        echo -e "\nI don't have a record for that phone number, what's your name?"
-        read CUSTOMER_NAME
-
-        # insert new customer
-        INSERT_CUSTOMER_RESULT=$($PSQL "INSERT INTO customers(name, phone) VALUES('$CUSTOMER_NAME', '$CUSTOMER_PHONE')") 
-      fi
-      CUSTOMER_ID=$($PSQL "SELECT customer_id FROM customers WHERE phone = '$CUSTOMER_PHONE'")
-      CUSTOMER_NAME_FORMATTED=$(echo $CUSTOMER_NAME | sed -r 's/^ *| *$//g')
-
-      # ask for time of appointment
-      echo -e "\nWhat time would you like your $SERVICE_NAME_FORMATTED, $CUSTOMER_NAME_FORMATTED?"
-      read SERVICE_TIME
-
-      echo -e "\nI have put you down for a $SERVICE_NAME_FORMATTED at $SERVICE_TIME, $CUSTOMER_NAME_FORMATTED."
-
-      
-      INSERT_APPOINTMENT_RESULT=$($PSQL "INSERT INTO appointments(customer_id, service_id, time) VALUES ($CUSTOMER_ID, $SERVICE_ID, '$SERVICE_TIME')")
-    fi
+    echo -e "\nI don't have a record for that phone number, what's your name?"
+    read CUSTOMER_NAME
+    NAME=$(echo $NAME | sed 's/ //g')
+    SAVED_TO_TABLE_CUSTOMERS=$($PSQL "INSERT INTO customers(name,phone) VALUES('$NAME','$CUSTOMER_PHONE')")
   fi
-
+  
+  GET_SERVICE_NAME=$($PSQL "SELECT name FROM services WHERE service_id=$SERVICE_ID_SELECTED")
+  SERVICE_NAME=$(echo $GET_SERVICE_NAME| sed 's/ //g')
+  CUSTOMER_ID=$($PSQL "SELECT customer_id FROM customers WHERE phone='$CUSTOMER_PHONE'")
+  
+  echo -e "\nWhat time would you like your $SERVICE_NAME, $CUSTOMER_NAME?"
+  read SERVICE_TIME
+  SAVED_TO_TABLE_APPOINTMENTS=$($PSQL "INSERT INTO appointments(customer_id, service_id, time) VALUES($CUSTOMER_ID, $SERVICE_ID_SELECTED, '$SERVICE_TIME')")
+  if [[ $SAVED_TO_TABLE_APPOINTMENTS == "INSERT 0 1" ]]
+  then
+    echo -e "\nI have put you down for a $SERVICE_NAME at $SERVICE_TIME, $CUSTOMER_NAME."
+  fi
 
 }
 
-MAIN_MENU
+GET_SERVICES_ID
